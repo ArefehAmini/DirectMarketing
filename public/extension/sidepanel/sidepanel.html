@@ -1,0 +1,75 @@
+<!DOCTYPE html>
+<html lang="fa" dir="rtl">
+<head>
+  <meta charset="UTF-8" />
+  <link rel="stylesheet" href="sidepanel.css" />
+</head>
+<body>
+  <header>
+    <div class="brand">
+      <div class="logo">RW</div>
+      <div>
+        <div class="title">RasaWeb Agent</div>
+        <div id="status-line" class="status">⚪ —</div>
+      </div>
+    </div>
+    <button id="refresh-btn" title="به‌روزرسانی">⟳</button>
+  </header>
+
+  <!-- صفحه جاری -->
+  <section class="card">
+    <div class="card-title">صفحه جاری</div>
+    <div id="ctx-empty" class="empty">این صفحه یک پیام‌رسان پشتیبانی‌شده نیست.<br />یکی از تب‌های پیام‌رسان را باز کنید.</div>
+    <div id="ctx" class="hidden">
+      <div class="row">
+        <span class="k">پلتفرم</span>
+        <span id="c-platform" class="v">—</span>
+      </div>
+      <div class="row">
+        <span class="k">چت جاری</span>
+        <span id="c-chat" class="v">—</span>
+      </div>
+      <div class="row">
+        <span class="k">نوع چت</span>
+        <span id="c-chattype" class="v">—</span>
+      </div>
+      <div class="row">
+        <span class="k">وضعیت</span>
+        <span id="c-status" class="v">🟢 Ready</span>
+      </div>
+      <div class="row">
+        <span class="k">نشست</span>
+        <span id="c-session" class="v">—</span>
+      </div>
+    </div>
+  </section>
+
+  <!-- اقدام‌های سریع -->
+  <section class="card">
+    <div class="card-title">اقدام‌ها</div>
+    <div class="grid">
+      <button class="act" data-action="READ_CHAT_CONTEXT">📋 خواندن Context</button>
+      <button class="act" data-action="GET_CHAT_TYPE">🔍 نوع چت</button>
+      <button class="act" data-action="SEND_TEXT">💬 ارسال پیام</button>
+      <button class="act" data-action="SEND_IMAGE">🖼 ارسال عکس</button>
+      <button class="act" data-action="SEND_FILE">📎 ارسال فایل</button>
+      <button class="act" data-action="CREATE_GROUP">👥 ساخت گروه</button>
+    </div>
+    <div id="act-note" class="note hidden"></div>
+  </section>
+
+  <!-- فعالیت زنده -->
+  <section class="card grow">
+    <div class="card-title">فعالیت عامل</div>
+    <div id="activity" class="activity">
+      <div class="act-line muted">هنوز فعالیتی ثبت نشده — اجرای وظیفه‌ها اینجا نمایش داده می‌شود.</div>
+    </div>
+  </section>
+
+  <footer>
+    <span id="panel-link" class="link">مشاهده در پنل مرکزی ↗</span>
+  </footer>
+
+  <script src="sidepanel.js"></script>
+</body>
+</html>

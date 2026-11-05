@@ -1,0 +1,551 @@
+     1→"use client";
+     2→import { useMemo, useState } from "react";
+     3→import { toast } from "sonner";
+     4→import { useApp } from "@/store/app-store";
+     5→import { PlatformIcon } from "@/components/shared/platform-icon";
+     6→import { MessagePreview, PreviewTabSwitch } from "@/components/shared/message-preview";
+     7→import { PLATFORM_LABEL, PLATFORMS, Platform } from "@/lib/types";
+     8→import { faNum } from "@/lib/fa";
+     9→import { cn } from "@/lib/utils";
+    10→import { Button } from "@/components/ui/button";
+    11→import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+    12→import { Input } from "@/components/ui/input";
+    13→import { Label } from "@/components/ui/label";
+    14→import { Textarea } from "@/components/ui/textarea";
+    15→import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
+    16→import { Progress } from "@/components/ui/progress";
+    17→import { Badge } from "@/components/ui/badge";
+    18→import { Separator } from "@/components/ui/separator";
+    19→import { Skeleton } from "@/components/shared/ui-bits";
+    20→import {
+    21→  ArrowLeft, ArrowRight, Users, Send, Megaphone, CalendarClock, Sparkles, Wand2,
+    22→  Loader2, CheckCircle2, Eye, Info, Rocket, Save, Clock3, AlertTriangle, Type,
+    23→} from "lucide-react";
+    24→
+    25→const AI_MODES = [
+    26→  { key: "professional", label: "حرفه‌ای‌تر" },
+    27→  { key: "attractive", label: "جذاب‌تر" },
+    28→  { key: "shorter", label: "کوتاه‌تر" },
+    29→  { key: "friendly", label: "صمیمی‌تر" },
+    30→  { key: "formal", label: "رسمی‌تر" },
+    31→  { key: "sales", label: "فروش‌محور" },
+    32→];
+    33→
+    34→const GOALS = [
+    35→  { key: "intro", label: "معرفی" },
+    36→  { key: "sales", label: "فروش" },
+    37→  { key: "followup", label: "پیگیری" },
+    38→  { key: "announce", label: "اطلاع‌رسانی" },
+    39→  { key: "invite", label: "دعوت" },
+    40→  { key: "offer", label: "پیشنهاد ویژه" },
+    41→];
+    42→
+    43→const AUDIENCE_MODES = [
+    44→  { key: "all", label: "همه مخاطبان", desc: "کل مخاطبان سیستم" },
+    45→  { key: "group", label: "گروه خاص", desc: "انتخاب از دسته‌بندی‌ها" },
+    46→  { key: "tag", label: "برچسب خاص", desc: "فیلتر بر اساس Tag" },
+    47→  { key: "manual", label: "انتخاب دستی", desc: "ورود یا انتخاب شماره‌ها" },
+    48→];
+    49→
+    50→export function CreateCampaignView() {
+    51→  const { contacts, groups, rules, accounts, createCampaign, navigate } = useApp();
+    52→  const [step, setStep] = useState(1);
+    53→
+    54→  // Step 1
+    55→  const [name, setName] = useState("");
+    56→  // Step 2
+    57→  const [audMode, setAudMode] = useState("all");
+    58→  const [groupId, setGroupId] = useState(groups[0]?.id ?? "g1");
+    59→  const [tag, setTag] = useState("");
+    60→  const [manualCount, setManualCount] = useState("1200");
+    61→  // Step 3
+    62→  const [platforms, setPlatforms] = useState<Platform[]>([]);
+    63→  // Step 4
+    64→  const [message, setMessage] = useState("");
+    65→  const [aiGoal, setAiGoal] = useState("");
+    66→  const [aiGoalType, setAiGoalType] = useState("offer");
+    67→  const [aiLoading, setAiLoading] = useState<string | null>(null);
+    68→  const [variants, setVariants] = useState<string[]>([]);
+    69→  const [previewPlatform, setPreviewPlatform] = useState<Platform>("telegram");
+    70→  // Step 5
+    71→  const [startAt, setStartAt] = useState("08:00");
+    72→  const [endAt, setEndAt] = useState("18:00");
+    73→
+    74→  const allTags = useMemo(() => Array.from(new Set(contacts.flatMap((c) => c.tags))).slice(0, 8), [contacts]);
+    75→
+    76→  const audienceCount = useMemo(() => {
+    77→    if (audMode === "all") return contacts.length;
+    78→    if (audMode === "group") return groups.find((g) => g.id === groupId)?.count ?? 0;
+    79→    if (audMode === "tag") {
+    80→      const base = tag ? contacts.filter((c) => c.tags.includes(tag)).length : 0;
+    81→      return base;
+    82→    }
+    83→    const n = parseInt(manualCount.replace(/\D/g, ""), 10);
+    84→    return Math.min(n || 0, contacts.length);
+    85→  }, [audMode, groupId, tag, manualCount, contacts, groups]);
+    86→
+    87→  const activeAccountsFor = (p: Platform) => accounts.filter((a) => a.platform === p && a.status === "active").length;
+    88→  const ruleFor = (p: Platform) => rules.find((r) => r.platform === p);
+    89→
+    90→  const capacityCheck = useMemo(() => {
+    91→    // برآورد ظرفیت امروز پلتفرم‌های انتخابی × بازه
+    92→    let cap = 0;
+    93→    platforms.forEach((p) => {
+    94→      cap += activeAccountsFor(p) * (ruleFor(p)?.dailyLimit ?? 20);
+    95→    });
+    96→    return cap;
+    97→  }, [platforms, accounts, rules]);
+    98→
+    99→  const perPlatform = platforms.length > 0 ? Math.ceil(audienceCount / platforms.length) : 0;
+   100→  const windowHours = useMemo(() => {
+   101→    const s = parseInt(startAt.split(":")[0], 10) || 8;
+   102→    const e = parseInt(endAt.split(":")[0], 10) || 18;
+   103→    return Math.max(1, e - s);
+   104→  }, [startAt, endAt]);
+   105→  const perHourPerPlatform = Math.ceil(perPlatform / windowHours);
+   106→
+   107→  const canNext =
+   108→    (step === 1 && name.trim().length >= 3) ||
+   109→    (step === 2 && audienceCount > 0) ||
+   110→    (step === 3 && platforms.length > 0) ||
+   111→    (step === 4 && message.trim().length >= 10) ||
+   112→    step === 5;
+   113→
+   114→  const callAI = async (mode: string) => {
+   115→    if (!message.trim()) return toast.error("اول متن خام پیام را بنویسید");
+   116→    setAiLoading(mode);
+   117→    setVariants([]);
+   118→    try {
+   119→      const res = await fetch("/api/ai/message", {
+   120→        method: "POST",
+   121→        headers: { "Content-Type": "application/json" },
+   122→        body: JSON.stringify({ text: message, mode, goal: mode === "goal" ? aiGoalType : "", customGoal: aiGoal }),
+   123→      });
+   124→      const data = await res.json();
+   125→      setVariants(data.variants ?? []);
+   126→      if (data.source === "fallback") toast.info("پاسخ از قالب‌های آماده نمایش داده شد");
+   127→    } catch {
+   128→      toast.error("خطا در ارتباط با دستیار هوشمند");
+   129→    } finally {
+   130→      setAiLoading(null);
+   131→    }
+   132→  };
+   133→
+   134→  const generateGoal = async () => {
+   135→    if (!aiGoal.trim() && !message.trim()) return toast.error("هدف پیام یا متن اولیه را بنویسید");
+   136→    setAiLoading("goal");
+   137→    setVariants([]);
+   138→    try {
+   139→      const base = message.trim() || aiGoal;
+   140→      const res = await fetch("/api/ai/message", {
+   141→        method: "POST",
+   142→        headers: { "Content-Type": "application/json" },
+   143→        body: JSON.stringify({ text: base, mode: "goal", goal: aiGoalType }),
+   144→      });
+   145→      const data = await res.json();
+   146→      setVariants(data.variants ?? []);
+   147→    } catch {
+   148→      toast.error("خطا در ارتباط با دستیار هوشمند");
+   149→    } finally {
+   150→      setAiLoading(null);
+   151→    }
+   152→  };
+   153→
+   154→  const launch = (status: "running" | "scheduled" | "draft") => {
+   155→    const id = createCampaign({
+   156→      name: name.trim(),
+   157→      status,
+   158→      audienceCount,
+   159→      platforms,
+   160→      accountsUsed: platforms.reduce((n, p) => n + Math.min(activeAccountsFor(p), 10), 0),
+   161→      message: message.trim(),
+   162→      plannedCount: audienceCount,
+   163→      sentCount: 0,
+   164→      successCount: 0,
+   165→      failedCount: 0,
+   166→      queuedCount: status === "running" || status === "scheduled" ? audienceCount : 0,
+   167→      stoppedCount: 0,
+   168→      startAt,
+   169→      endAt,
+   170→      startDate: status === "scheduled" ? "فردا" : status === "running" ? "امروز" : "—",
+   171→    });
+   172→    if (status === "running") toast.success("کمپین شروع شد — پیام‌ها به صف ارسال اضافه شدند");
+   173→    if (status === "scheduled") toast.success("کمپین زمان‌بندی شد");
+   174→    if (status === "draft") toast.info("پیش‌نویس ذخیره شد");
+   175→    navigate("campaign-details", { campaignId: id });
+   176→  };
+   177→
+   178→  const steps = [
+   179→    { n: 1, label: "نام کمپین", icon: Type },
+   180→    { n: 2, label: "انتخاب مخاطبان", icon: Users },
+   181→    { n: 3, label: "انتخاب پلتفرم", icon: Send },
+   182→    { n: 4, label: "نوشتن پیام", icon: Wand2 },
+   183→    { n: 5, label: "زمان‌بندی و اجرا", icon: CalendarClock },
+   184→  ];
+   185→
+   186→  return (
+   187→    <div className="max-w-5xl mx-auto space-y-6">
+   188→      {/* Stepper */}
+   189→      <div className="flex items-center gap-1 overflow-x-auto no-scrollbar pb-1">
+   190→        {steps.map((s, i) => (
+   191→          <div key={s.n} className="flex items-center gap-1 flex-1 last:flex-none min-w-fit">
+   192→            <button
+   193→              onClick={() => s.n < step && setStep(s.n)}
+   194→              className={cn(
+   195→                "flex items-center gap-2 rounded-full pl-3 pr-2 py-1.5 text-xs font-semibold border transition-colors whitespace-nowrap",
+   196→                step === s.n ? "bg-teal-600 text-white border-teal-600" : step > s.n ? "bg-teal-50 text-teal-700 border-teal-200 dark:bg-teal-950 dark:border-teal-900 cursor-pointer" : "bg-background text-muted-foreground"
+   197→              )}
+   198→            >
+   199→              <span className={cn("w-5 h-5 rounded-full flex items-center justify-center text-[10px]",
+   200→                step === s.n ? "bg-white/20" : step > s.n ? "bg-teal-600 text-white" : "bg-muted")}>
+   201→                {step > s.n ? "✓" : faNum(s.n)}
+   202→              </span>
+   203→              <s.icon className="w-3.5 h-3.5" />
+   204→              {s.label}
+   205→            </button>
+   206→            {i < 4 && <div className={cn("h-px w-full min-w-4", step > s.n ? "bg-teal-300" : "bg-border")} />}
+   207→          </div>
+   208→        ))}
+   209→      </div>
+   210→
+   211→      {/* STEP 1: name */}
+   212→      {step === 1 && (
+   213→        <Card className="shadow-none">
+   214→          <CardHeader className="pb-2"><CardTitle className="text-sm font-bold">نام کمپین چیست؟</CardTitle></CardHeader>
+   215→          <CardContent className="space-y-4 max-w-lg">
+   216→            <Input value={name} onChange={(e) => setName(e.target.value)} placeholder="مثلاً: پیشنهاد ویژه طراحی سایت مهر" className="h-11 text-sm" />
+   217→            <div className="flex flex-wrap gap-2">
+   218→              {["پیشنهاد ویژه مهر", "معرفی خدمات جدید", "پیگیری سرنخ‌های نمایشگاه", "تخفیف باشگاه مشتریان"].map((s) => (
+   219→                <button key={s} onClick={() => setName(s)} className="rounded-full border px-3 py-1.5 text-[11px] text-muted-foreground hover:border-teal-400 hover:text-teal-700 transition-colors cursor-pointer">
+   220→                  {s}
+   221→                </button>
+   222→              ))}
+   223→            </div>
+   224→            <p className="text-[11px] text-muted-foreground">نام کمپین در گزارش‌ها، اعلان‌ها و صف ارسال استفاده می‌شود.</p>
+   225→          </CardContent>
+   226→        </Card>
+   227→      )}
+   228→
+   229→      {/* STEP 2: audience */}
+   230→      {step === 2 && (
+   231→        <Card className="shadow-none">
+   232→          <CardHeader className="pb-2"><CardTitle className="text-sm font-bold">مخاطبان کمپین را انتخاب کنید</CardTitle></CardHeader>
+   233→          <CardContent className="space-y-5">
+   234→            <RadioGroup value={audMode} onValueChange={setAudMode} className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+   235→              {AUDIENCE_MODES.map((m) => (
+   236→                <Label key={m.key} htmlFor={m.key} className="cursor-pointer">
+   237→                  <div className={cn("rounded-xl border p-4 h-full transition-all", audMode === m.key ? "border-teal-500 bg-teal-50/50 dark:bg-teal-950/30 ring-1 ring-teal-500/30" : "hover:border-teal-300")}>
+   238→                    <div className="flex items-center justify-between mb-2">
+   239→                      <span className="text-xs font-bold">{m.label}</span>
+   240→                      <RadioGroupItem value={m.key} id={m.key} />
+   241→                    </div>
+   242→                    <div className="text-[10px] text-muted-foreground">{m.desc}</div>
+   243→                  </div>
+   244→                </Label>
+   245→              ))}
+   246→            </RadioGroup>
+   247→
+   248→            {audMode === "group" && (
+   249→              <div className="space-y-2">
+   250→                <Label className="text-xs">گروه مخاطبان</Label>
+   251→                <div className="flex flex-wrap gap-2">
+   252→                  {groups.map((g) => (
+   253→                    <button key={g.id} onClick={() => setGroupId(g.id)}
+   254→                      className={cn("rounded-full border pl-3 pr-2.5 py-2 text-xs font-medium transition-colors cursor-pointer flex items-center gap-2",
+   255→                        groupId === g.id ? "bg-teal-600 text-white border-teal-600" : "bg-card hover:border-teal-300")}>
+   256→                      <span className={cn("w-2 h-2 rounded-full", g.color)} />{g.name} · {faNum(g.count)}
+   257→                    </button>
+   258→                  ))}
+   259→                </div>
+   260→              </div>
+   261→            )}
+   262→
+   263→            {audMode === "tag" && (
+   264→              <div className="space-y-2">
+   265→                <Label className="text-xs">برچسب (Tag)</Label>
+   266→                <div className="flex flex-wrap gap-2">
+   267→                  {allTags.map((t) => (
+   268→                    <button key={t} onClick={() => setTag(t)}
+   269→                      className={cn("rounded-full border px-3 py-1.5 text-xs transition-colors cursor-pointer",
+   270→                        tag === t ? "bg-teal-600 text-white border-teal-600" : "bg-card hover:border-teal-300")}>
+   271→                      #{t}
+   272→                    </button>
+   273→                  ))}
+   274→                </div>
+   275→              </div>
+   276→            )}
+   277→
+   278→            {audMode === "manual" && (
+   279→              <div className="space-y-2 max-w-xs">
+   280→                <Label className="text-xs">تعداد مخاطبان دستی (از لیست)</Label>
+   281→                <Input value={manualCount} onChange={(e) => setManualCount(e.target.value.replace(/\D/g, ""))} dir="ltr" className="text-left" />
+   282→              </div>
+   283→            )}
+   284→
+   285→            <div className="rounded-xl bg-secondary/60 p-4 flex items-center justify-between">
+   286→              <div>
+   287→                <div className="text-[11px] text-muted-foreground">مخاطبان انتخاب‌شده</div>
+   288→                <div className="text-2xl font-bold tabular-nums text-teal-700 dark:text-teal-400">{faNum(audienceCount)}</div>
+   289→              </div>
+   290→              <Users className="w-8 h-8 text-teal-600/30" />
+   291→            </div>
+   292→          </CardContent>
+   293→        </Card>
+   294→      )}
+   295→
+   296→      {/* STEP 3: platforms */}
+   297→      {step === 3 && (
+   298→        <Card className="shadow-none">
+   299→          <CardHeader className="pb-2">
+   300→            <CardTitle className="text-sm font-bold">کدام پیام‌رسان‌ها؟</CardTitle>
+   301→            <p className="text-xs text-muted-foreground">سیستم به‌صورت خودکار فقط از اکانت‌های سالم و دارای ظرفیت استفاده می‌کند (Multi-Account Pool).</p>
+   302→          </CardHeader>
+   303→          <CardContent className="space-y-4">
+   304→            <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+   305→              {PLATFORMS.map((p) => {
+   306→                const selected = platforms.includes(p);
+   307→                const rule = ruleFor(p);
+   308→                const activeAcc = activeAccountsFor(p);
+   309→                return (
+   310→                  <button
+   311→                    key={p}
+   312→                    onClick={() => setPlatforms((prev) => (prev.includes(p) ? prev.filter((x) => x !== p) : [...prev, p]))}
+   313→                    className={cn(
+   314→                      "rounded-2xl border p-4 text-right transition-all cursor-pointer",
+   315→                      selected ? "border-teal-500 bg-teal-50/50 dark:bg-teal-950/30 ring-1 ring-teal-500/30" : "bg-card hover:border-teal-300"
+   316→                    )}
+   317→                  >
+   318→                    <div className="flex items-center justify-between mb-2.5">
+   319→                      <PlatformIcon platform={p} size={38} className="rounded-xl" />
+   320→                      {selected && <CheckCircle2 className="w-5 h-5 text-teal-600" />}
+   321→                    </div>
+   322→                    <div className="text-sm font-bold">{PLATFORM_LABEL[p]}</div>
+   323→                    <div className="text-[10px] text-muted-foreground mt-1 leading-5">
+   324→                      {faNum(activeAcc)} اکانت فعال · Limit روزانه {faNum(rule?.dailyLimit ?? 20)}
+   325→                    </div>
+   326→                  </button>
+   327→                );
+   328→              })}
+   329→            </div>
+   330→            {platforms.length > 0 && (
+   331→              <div className="rounded-xl bg-secondary/60 p-4 text-xs leading-6">
+   332→                توزیع پیام‌ها: <b>{faNum(audienceCount)}</b> مخاطب روی <b>{faNum(platforms.length)}</b> پلتفرم ≈ <b>{faNum(perPlatform)}</b> پیام برای هر پلتفرم — ظرفیت روزانه فعال این پلتفرم‌ها: <b className="text-teal-700 dark:text-teal-400">{faNum(capacityCheck)}</b> پیام
+   333→                {perPlatform > capacityCheck && (
+   334→                  <div className="mt-2 flex items-start gap-1.5 text-amber-600">
+   335→                    <AlertTriangle className="w-3.5 h-3.5 mt-0.5 shrink-0" />
+   336→                    <span>ظرفیت امروز کافی نیست؛ پیام‌های مازاد در روزهای بعدی صف پردازش می‌شوند.</span>
+   337→                  </div>
+   338→                )}
+   339→              </div>
+   340→            )}
+   341→          </CardContent>
+   342→        </Card>
+   343→      )}
+   344→
+   345→      {/* STEP 4: message + AI + preview */}
+   346→      {step === 4 && (
+   347→        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 items-start">
+   348→          <div className="space-y-4">
+   349→            <Card className="shadow-none">
+   350→              <CardHeader className="pb-2"><CardTitle className="text-sm font-bold">متن پیام</CardTitle></CardHeader>
+   351→              <CardContent className="space-y-3">
+   352→                <Textarea value={message} onChange={(e) => setMessage(e.target.value)} className="min-h-40 text-sm leading-7" placeholder="مثلاً: برای طراحی سایت تخفیف داریم." />
+   353→                <div className="flex items-center justify-between text-[11px] text-muted-foreground">
+   354→                  <span className="flex items-center gap-1"><Type className="w-3 h-3" /> {faNum(message.length)} کاراکتر</span>
+   355→                  <span>{message.length > 480 ? <span className="text-amber-600">پیشنهاد: کوتاه‌تر برای خوانایی موبایل</span> : "مناسب پیام‌رسان‌ها"}</span>
+   356→                </div>
+   357→              </CardContent>
+   358→            </Card>
+   359→
+   360→            {/* AI Assistant */}
+   361→            <Card className="shadow-none border-teal-200 dark:border-teal-900">
+   362→              <CardHeader className="pb-2">
+   363→                <CardTitle className="text-sm font-bold flex items-center gap-2">
+   364→                  <span className="w-7 h-7 rounded-lg bg-gradient-to-br from-teal-500 to-emerald-500 flex items-center justify-center">
+   365→                    <Sparkles className="w-4 h-4 text-white" />
+   366→                  </span>
+   367→                  دستیار هوش مصنوعی پیام
+   368→                </CardTitle>
+   369→              </CardHeader>
+   370→              <CardContent className="space-y-4">
+   371→                <div className="flex flex-wrap gap-2">
+   372→                  {AI_MODES.map((m) => (
+   373→                    <button
+   374→                      key={m.key}
+   375→                      onClick={() => callAI(m.key)}
+   376→                      disabled={aiLoading !== null}
+   377→                      className="rounded-full border border-teal-200 dark:border-teal-800 px-3.5 py-1.5 text-xs font-medium text-teal-700 dark:text-teal-400 hover:bg-teal-50 dark:hover:bg-teal-950/50 transition-colors cursor-pointer disabled:opacity-50"
+   378→                    >
+   379→                      {aiLoading === m.key ? <Loader2 className="w-3 h-3 inline animate-spin ml-1" /> : <Wand2 className="w-3 h-3 inline ml-1" />}
+   380→                      {m.label} کن
+   381→                    </button>
+   382→                  ))}
+   383→                </div>
+   384→
+   385→                <Separator />
+   386→
+   387→                <div className="space-y-2.5">
+   388→                  <Label className="text-xs">هدف پیام را بنویسید</Label>
+   389→                  <div className="flex flex-wrap gap-1.5">
+   390→                    {GOALS.map((g) => (
+   391→                      <button key={g.key} onClick={() => setAiGoalType(g.key)}
+   392→                        className={cn("rounded-full border px-3 py-1 text-[11px] transition-colors cursor-pointer",
+   393→                          aiGoalType === g.key ? "bg-teal-600 text-white border-teal-600" : "bg-card hover:border-teal-300 text-muted-foreground")}>
+   394→                        {g.label}
+   395→                      </button>
+   396→                    ))}
+   397→                  </div>
+   398→                  <Input value={aiGoal} onChange={(e) => setAiGoal(e.target.value)} placeholder="مثلاً: مشتریان قدیمی را به خرید مجدد ترغیب کن" className="text-xs h-9" />
+   399→                  <Button onClick={generateGoal} disabled={aiLoading !== null} size="sm" className="bg-gradient-to-l from-teal-600 to-emerald-600 hover:from-teal-700 hover:to-emerald-700 text-white gap-1.5">
+   400→                    {aiLoading === "goal" ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Sparkles className="w-3.5 h-3.5" />}
+   401→                    تولید نسخه‌های پیشنهادی
+   402→                  </Button>
+   403→                </div>
+   404→
+   405→                {/* Variants */}
+   406→                {aiLoading && (
+   407→                  <div className="space-y-2">
+   408→                    <Skeleton className="h-16 w-full rounded-xl" />
+   409→                    <Skeleton className="h-16 w-full rounded-xl" />
+   410→                    <Skeleton className="h-16 w-full rounded-xl" />
+   411→                  </div>
+   412→                )}
+   413→                {!aiLoading && variants.length > 0 && (
+   414→                  <div className="space-y-2.5 animate-in fade-in slide-in-from-bottom-2">
+   415→                    {variants.map((v, i) => (
+   416→                      <div key={i} className="rounded-xl border p-3.5 bg-muted/20">
+   417→                        <p className="text-xs leading-6 whitespace-pre-wrap">{v}</p>
+   418→                        <div className="flex items-center justify-between mt-2.5">
+   419→                          <Badge variant="secondary" className="text-[10px]">نسخه {faNum(i + 1)}</Badge>
+   420→                          <div className="flex gap-1.5">
+   421→                            <Button size="sm" variant="ghost" className="h-7 text-[11px]" onClick={() => { navigator.clipboard?.writeText(v); toast.success("کپی شد"); }}>
+   422→                              کپی
+   423→                            </Button>
+   424→                            <Button size="sm" className="h-7 text-[11px] bg-teal-600 hover:bg-teal-700 text-white" onClick={() => { setMessage(v); toast.success(`نسخه ${faNum(i + 1)} در ادیتور قرار گرفت`); }}>
+   425→                              استفاده
+   426→                            </Button>
+   427→                          </div>
+   428→                        </div>
+   429→                      </div>
+   430→                    ))}
+   431→                  </div>
+   432→                )}
+   433→              </CardContent>
+   434→            </Card>
+   435→          </div>
+   436→
+   437→          {/* Preview column */}
+   438→          <Card className="shadow-none lg:sticky lg:top-2">
+   439→            <CardHeader className="pb-2">
+   440→              <CardTitle className="text-sm font-bold flex items-center gap-2"><Eye className="w-4 h-4 text-teal-600" /> پیش‌نمایش پیام</CardTitle>
+   441→            </CardHeader>
+   442→            <CardContent>
+   443→              <PreviewTabSwitch platforms={platforms.length > 0 ? platforms : ["telegram"]} active={previewPlatform} onChange={setPreviewPlatform} />
+   444→              <MessagePreview platform={previewPlatform} message={message} />
+   445→            </CardContent>
+   446→          </Card>
+   447→        </div>
+   448→      )}
+   449→
+   450→      {/* STEP 5: schedule + launch */}
+   451→      {step === 5 && (
+   452→        <div className="space-y-4">
+   453→          <Card className="shadow-none">
+   454→            <CardHeader className="pb-2"><CardTitle className="text-sm font-bold">بازه ارسال</CardTitle></CardHeader>
+   455→            <CardContent className="space-y-5">
+   456→              <div className="flex flex-wrap items-end gap-4">
+   457→                <div className="space-y-1.5">
+   458→                  <Label className="text-xs flex items-center gap-1"><Clock3 className="w-3 h-3" /> شروع</Label>
+   459→                  <Input type="time" value={startAt} onChange={(e) => setStartAt(e.target.value)} dir="ltr" className="w-32 text-left" />
+   460→                </div>
+   461→                <div className="space-y-1.5">
+   462→                  <Label className="text-xs flex items-center gap-1"><Clock3 className="w-3 h-3" /> پایان</Label>
+   463→                  <Input type="time" value={endAt} onChange={(e) => setEndAt(e.target.value)} dir="ltr" className="w-32 text-left" />
+   464→                </div>
+   465→                <Badge variant="outline" className="mb-1.5">پیش‌فرض: ۰۸:۰۰ تا ۱۸:۰۰</Badge>
+   466→              </div>
+   467→
+   468→              <div className="rounded-xl border p-4">
+   469→                <div className="flex items-center justify-between text-xs mb-3">
+   470→                  <span className="font-semibold">توزیع تدریجی پیام‌ها در بازه ارسال</span>
+   471→                  <span className="text-muted-foreground">هر پیام‌رسان: ≈ {faNum(perHourPerPlatform)} پیام در ساعت</span>
+   472→                </div>
+   473→                <div className="flex gap-1 h-9 rounded-lg overflow-hidden">
+   474→                  {Array.from({ length: windowHours }, (_, i) => (
+   475→                    <div key={i} className="flex-1 bg-gradient-to-t from-teal-600/80 to-teal-400/70 flex items-end justify-center pb-0.5 relative group" style={{ opacity: 0.35 + (i / windowHours) * 0.65 }}>
+   476→                      <span className="text-[8px] text-white font-bold">{faNum(perHourPerPlatform > 99 ? Math.round(perHourPerPlatform / 100) + "۰۰+" : perHourPerPlatform)}</span>
+   477→                    </div>
+   478→                  ))}
+   479→                </div>
+   480→                <div className="flex justify-between text-[9px] text-muted-foreground mt-1.5 tabular-nums">
+   481→                  <span>{startAt}</span><span>{endAt}</span>
+   482→                </div>
+   483→                <p className="text-[10px] text-muted-foreground mt-3 leading-5">
+   484→                  پیام‌ها به‌صورت همزمان ارسال نمی‌شوند؛ سیستم آن‌ها را در صف زمان‌بندی کرده و ظرفیت هر اکانت (Limit روزانه) را در بازه مجاز به‌تدریج پردازش می‌کند.
+   485→                </p>
+   486→              </div>
+   487→
+   488→              {/* Per-platform plan */}
+   489→              <div className="space-y-2">
+   490→                {platforms.map((p) => {
+   491→                  const rule = ruleFor(p);
+   492→                  return (
+   493→                    <div key={p} className="flex flex-wrap items-center gap-3 rounded-xl border px-4 py-3">
+   494→                      <PlatformIcon platform={p} size={30} />
+   495→                      <div className="text-xs font-bold">{PLATFORM_LABEL[p]}</div>
+   496→                      <div className="text-[11px] text-muted-foreground">
+   497→                        ≈ {faNum(perPlatform)} پیام · Limit روزانه {faNum(rule?.dailyLimit ?? 20)} · {faNum(activeAccountsFor(p))} اکانت فعال
+   498→                      </div>
+   499→                      <div className="mr-auto flex items-center gap-2 min-w-32">
+   500→                        <Progress value={Math.min(100, (perPlatform / (activeAccountsFor(p) * (rule?.dailyLimit ?? 20))) * 100)} className="h-1.5 flex-1" />
+   501→                        <span className="text-[10px] text-muted-foreground whitespace-nowrap">
+   502→                          {perPlatform > activeAccountsFor(p) * (rule?.dailyLimit ?? 20) ? "چند روزه" : "یک روزه"}
+   503→                        </span>
+   504→                      </div>
+   505→                    </div>
+   506→                  );
+   507→                })}
+   508→              </div>
+   509→
+   510→              {/* Summary */}
+   511→              <div className="rounded-xl bg-secondary/60 p-4 text-xs leading-7">
+   512→                <b>مرور نهایی:</b> «{name}» — {faNum(audienceCount)} مخاطب — پلتفرم‌ها: {platforms.map((p) => PLATFORM_LABEL[p]).join("، ")} — بازه ارسال {startAt} تا {endAt}
+   513→                {message && <> — پیام: «{message.slice(0, 60)}{message.length > 60 ? "…" : ""}»</>}
+   514→              </div>
+   515→            </CardContent>
+   516→          </Card>
+   517→
+   518→          <div className="flex flex-wrap gap-2">
+   519→            <Button onClick={() => launch("running")} className="bg-gradient-to-l from-teal-600 to-emerald-600 hover:from-teal-700 hover:to-emerald-700 text-white gap-2 h-11 px-6">
+   520→              <Rocket className="w-4 h-4" /> اجرای کمپین
+   521→            </Button>
+   522→            <Button variant="outline" onClick={() => launch("scheduled")} className="gap-2 h-11">
+   523→              <CalendarClock className="w-4 h-4" /> زمان‌بندی برای فردا
+   524→            </Button>
+   525→            <Button variant="outline" onClick={() => launch("draft")} className="gap-2 h-11">
+   526→              <Save className="w-4 h-4" /> ذخیره پیش‌نویس
+   527→            </Button>
+   528→          </div>
+   529→        </div>
+   530→      )}
+   531→
+   532→      {/* Nav buttons */}
+   533→      <div className="flex items-center justify-between pt-2">
+   534→        <Button variant="ghost" disabled={step === 1} onClick={() => setStep((s) => Math.max(1, s - 1))} className="gap-1.5">
+   535→          <ArrowRight className="w-4 h-4" /> مرحله قبل
+   536→        </Button>
+   537→        {step < 5 && (
+   538→          <Button disabled={!canNext} onClick={() => setStep((s) => s + 1)} className="bg-teal-600 hover:bg-teal-700 text-white gap-1.5">
+   539→            مرحله بعد <ArrowLeft className="w-4 h-4" />
+   540→          </Button>
+   541→        )}
+   542→        {step === 5 && (
+   543→          <Button variant="ghost" onClick={() => navigate("campaigns")} className="text-muted-foreground">
+   544→            انصراف
+   545→          </Button>
+   546→        )}
+   547→      </div>
+   548→    </div>
+   549→  );
+   550→}
+   551→

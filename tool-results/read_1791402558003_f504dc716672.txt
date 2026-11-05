@@ -1,0 +1,545 @@
+   341→    const input = adapter.input?.();
+   342→    return !!(input && isVisEl(input));
+   343→  }
+   344→
+   345→  /* ═══════ یافتن کادر پیام به‌روش «عمومی» — مستقل از کلاس‌های UI ═══════
+   346→     آداپترها selector اختصاصی دارند؛ اگر با DOM فعلی سرویس نخوانند (مثل روبیکا که
+   347→     کلاس‌های obfuscate‌شده دارد)، این روش پشتیبان، هر contenteditable/textarea
+   348→     قابل‌مشاهده‌ای را می‌یابد که کادر جستجو نباشد — کادر پیام همیشه پایین‌ترین
+   349→     فیلد متنیِ صفحه است (بیشترین y). */
+   350→  function findComposer(adapter, searchEl) {
+   351→    const viaAdapter = adapter?.input?.();
+   352→    if (viaAdapter && isVisEl(viaAdapter)) {
+   353→      if (!(searchEl && (viaAdapter === searchEl || searchEl.contains(viaAdapter) || viaAdapter.contains(searchEl)))) {
+   354→        return viaAdapter;
+   355→      }
+   356→    }
+   357→    let best = null;
+   358→    let bestY = -Infinity;
+   359→    for (const el of document.querySelectorAll("[contenteditable='true'], textarea")) {
+   360→      if (!isVisEl(el)) continue;
+   361→      if (el.closest("#rw-agent-overlay")) continue;
+   362→      if (searchEl && (el === searchEl || searchEl.contains(el) || el.contains(searchEl))) continue;
+   363→      const y = el.getBoundingClientRect().y;
+   364→      if (y > bestY) { bestY = y; best = el; }
+   365→    }
+   366→    return best;
+   367→  }
+   368→
+   369→  /* نام مخاطب در نوار بالای صفحه؟ (سیگنال مستقل از selector عنوان)
+   370→     بعد از باز شدن گفتگو، کشوی نتایج بسته می‌شود و تنها جایِ نام مخاطب در
+   371→     بالای صفحه، عنوان خود گفتگوست */
+   372→  function topStripHasTarget(target) {
+   373→    const wanted = normFa(target);
+   374→    if (!wanted) return false;
+   375→    const words = wanted.split(" ").filter((w) => w.length >= 3);
+   376→    for (const el of document.querySelectorAll("body *")) {
+   377→      const tag = el.tagName;
+   378→      if (tag === "SCRIPT" || tag === "STYLE" || tag === "INPUT" || tag === "TEXTAREA") continue;
+   379→      if (el.children.length > 6) continue;
+   380→      if (!isVisEl(el)) continue;
+   381→      if (el.closest("#rw-agent-overlay")) continue;
+   382→      if (el.isContentEditable) continue;
+   383→      const r = el.getBoundingClientRect();
+   384→      if (r.y > 150 || r.height > 90 || r.height < 8) continue;
+   385→      const t = normFa(el.innerText);
+   386→      if (!t || t.length > 60) continue;
+   387→      if (t.includes(wanted) || (words.length && words.every((w) => t.includes(w)))) return true;
+   388→    }
+   389→    return false;
+   390→  }
+   391→
+   392→  /* ═══════ Dump ساختاری DOM برای عیب‌یابی از راه دور ═══════
+   393→     در شکستِ openChat/input، فیلدهای متنی + عناصر عنوان‌مانند + تعداد iframe
+   394→     ثبت می‌شود تا selector آداپتر بدون دسترسی به دستگاه کاربر دقیق شود. */
+   395→  function domSnapshotDebug(adapter) {
+   396→    try {
+   397→      const ce = [];
+   398→      for (const el of document.querySelectorAll("[contenteditable='true'], textarea")) {
+   399→        if (!isVisEl(el) || ce.length >= 6) continue;
+   400→        const r = el.getBoundingClientRect();
+   401→        ce.push({
+   402→          tag: el.tagName,
+   403→          cls: String(el.className || "").slice(0, 48),
+   404→          role: el.getAttribute("role") || "",
+   405→          ph: String(el.getAttribute("placeholder") || el.getAttribute("data-placeholder") || "").slice(0, 24),
+   406→          y: Math.round(r.y),
+   407→        });
+   408→      }
+   409→      const heads = [];
+   410→      for (const sel of ["header h4", "header h1", "header .title", "header [class*='title']", "[class*='header'] [class*='title']"]) {
+   411→        try {
+   412→          const el = document.querySelector(sel);
+   413→          if (el && isVisEl(el)) heads.push({ sel, txt: (el.innerText || "").slice(0, 28), cls: String(el.className || "").slice(0, 40) });
+   414→        } catch { /* selector نامعتبر */ }
+   415→        if (heads.length >= 4) break;
+   416→      }
+   417→      return JSON.stringify({ fr: document.querySelectorAll("iframe").length, ce, hd: heads, u: location.href.slice(-60) }).slice(0, 950);
+   418→    } catch { return "{}"; }
+   419→  }
+   420→
+   421→  /* تطبیق عنوان گفتگو با هدف — با نرمال‌سازی فارسی و کلمات معنادار (≥۳ حرف) */
+   422→  function chatMatchesTarget(adapter, target) {
+   423→    const title = normFa(adapter.chatTitle());
+   424→    if (!title) return false;
+   425→    const wanted = normFa(target);
+   426→    const words = wanted.split(" ").filter((w) => w.length >= 3);
+   427→    return title.includes(wanted) || words.some((w) => title.includes(w));
+   428→  }
+   429→
+   430→  /* جمع‌کردن کاندیدهای «نتیجه جستجو» — مستقل از نام کلاس‌ها:
+   431→     اسکن متنیِ همه عناصر کوچکِ قابل‌مشاهده که نام هدف را دارند.
+   432→     ⭐ کادر جستجو و فرزندانش حذف می‌شوند — متن تایپ‌شده داخل کادر جستجوست و
+   433→     بدون این استثنا، داخلی‌ترین عنصرِ حاوی هدف، خودِ کادر جستجو می‌شد و
+   434→     افزونه به‌جای نتیجه، روی کادر جستجو کلیک می‌کرد (باگ «وارد دایرکت نمیشه»). */
+   435→  function collectResultCandidates(target, searchEl) {
+   436→    const wanted = normFa(target);
+   437→    if (!wanted) return [];
+   438→    const words = wanted.split(" ").filter((w) => w.length >= 3);
+   439→
+   440→    const matches = [];
+   441→    for (const el of document.querySelectorAll("body *")) {
+   442→      const tag = el.tagName;
+   443→      if (tag === "SCRIPT" || tag === "STYLE" || tag === "INPUT" || tag === "TEXTAREA") continue;
+   444→      if (el.children.length > 10) continue; /* کانتینرهای بزرگ */
+   445→      if (!isVisEl(el)) continue;
+   446→      /* خودِ کادر جستجو (input/contentEditable) و والد/فرزندانش هرگز کاندید نیستند */
+   447→      if (searchEl && (el === searchEl || searchEl.contains(el) || el.contains(searchEl))) continue;
+   448→      /* پوشش وضعیت عامل (رویِ RasaWeb) هرگز کاندید نیست — برچسب‌هایش «پیام» و «گفتگو» دارند */
+   449→      if (el.closest("#rw-agent-overlay")) continue;
+   450→      /* هدر چت باز/منو/کادر پیام نباید قاطی نتایج شود */
+   451→      if (el.closest("header, nav, [role='banner'], [class*='chatHeader'], [class*='ChatHeader'], [class*='chat-header'], [class*='composer'], [class*='message']")) continue;
+   452→      /* فیلدهای متنی فعال (مثل خود جستجو اگر contentEditable باشد) */
+   453→      if (el.isContentEditable) continue;
+   454→      const t = normFa(el.innerText);
+   455→      if (!t || t.length > 150) continue; /* فقط آیتم‌های کوچک لیست — نه کل ستون */
+   456→      if (t.includes(wanted) || words.some((w) => t.includes(w))) matches.push(el);
+   457→    }
+   458→    const innermost = matches.filter((el) => !matches.some((o) => o !== el && el.contains(o)));
+   459→    innermost.sort((a, b) => a.getBoundingClientRect().top - b.getBoundingClientRect().top);
+   460→    return innermost;
+   461→  }
+   462→
+   463→  /* والدینِ قابل‌کلیکِ کاندید — هندلر کلیک UIها معمولاً روی آیتم لیست (li/role=button) است
+   464→     نه روی داخلی‌ترین عنصر متنی؛ تا ۳ سطح بالاتر می‌رویم */
+   465→  function clickableAncestors(el) {
+   466→    const out = [];
+   467→    let cur = el?.parentElement;
+   468→    for (let i = 0; cur && cur !== document.body && i < 3; i++) {
+   469→      const role = cur.getAttribute?.("role");
+   470→      const cls = typeof cur.className === "string" ? cur.className : "";
+   471→      if (
+   472→        role === "button" || role === "option" || role === "listitem" || role === "menuitem" ||
+   473→        cur.tagName === "LI" || cur.tagName === "A" ||
+   474→        /item|row|chat|result|user|contact|click|entry/i.test(cls)
+   475→      ) out.push(cur);
+   476→      cur = cur.parentElement;
+   477→    }
+   478→    return out;
+   479→  }
+   480→
+   481→  /* باز کردن گفتگو با جستجو — استراتژی چندلایه:
+   482→     ① تایپ در جستجو → ② کلیک سینتتیک روی نتایج + والدین قابل‌کلیک
+   483→     → ③ کلیک «مورد اعتماد مرورگر» (chrome.debugger) → ④ کیبورد (ArrowDown+Enter)
+   484→     در هر مرحله باز شدن گفتگو بررسی می‌شود؛ در شکست، دیاگنوستیک دقیق برگردانده می‌شود */
+   485→  async function openChat(adapter, target) {
+   486→    const dbg = { search: false, typed: "", results: 0, clicks: 0, keys: false, trusted: false };
+   487→    /* وضعیت اولیه — برای گارد «گفتگوی اشتباه»: اگر گفتگوی دیگری از قبل باز باشد،
+   488→       وجود کادر پیام به‌تنهایی معیار «باز شد» نیست (پیامِ هدف به گفتگوی اشتباه می‌رفت) */
+   489→    const startTitle = normFa(adapter.chatTitle());
+   490→    const composerWasOpen = !!findComposer(adapter, null);
+   491→    /* تشخیص «گفتگو باز شد» — سه سیگنال مستقل از کلاس‌های UI:
+   492→       ① تطبیق عنوان آداپتر  ② کادر پیام تازه باز شده (عنوان تغییر کرده یا قبلاً گفتگویی نبود)
+   493→       ③ عناصر نتیجهٔ جستجو از DOM جدا شدند + نام مخاطب در نوار بالای صفحه + کادر پیام موجود
+   494→       سیگنال ③ دقیقاً برای سرویس‌هایی مثل روبیکاست که selector عنوان/کادر با DOMشان نمی‌خواند */
+   495→    const opened = () => {
+   496→      if (chatMatchesTarget(adapter, target)) return true;
+   497→      const nowTitle = normFa(adapter.chatTitle());
+   498→      const titleChanged = !!(nowTitle && nowTitle !== startTitle);
+   499→      const comp = findComposer(adapter, null);
+   500→      const compVisible = !!(comp && isVisEl(comp));
+   501→      if (compVisible && (titleChanged || !composerWasOpen)) return true;
+   502→      if (compVisible && dbg.results > 0 && resultsGone() && topStripHasTarget(target)) return true;
+   503→      return false;
+   504→    };
+   505→
+   506→    if (!target) return { ok: !!adapter.chatTitle(), errorKind: adapter.chatTitle() ? undefined : "chat_not_found" };
+   507→    if (chatMatchesTarget(adapter, target)) return { ok: true }; /* گفتگوی هدف از قبل باز است */
+   508→
+   509→    const fail = () => {
+   510→      const uniComp = findComposer(adapter, null);
+   511→      const parts = [
+   512→        `کادر جستجو: ${dbg.search ? "پیدا شد" : "پیدا نشد"}`,
+   513→        `تایپ: ${dbg.typed ? `«${dbg.typed}»` : "انجام نشد"}`,
+   514→        `نتایج دیده‌شده: ${dbg.results}`,
+   515→        `کلیک: ${dbg.clicks}`,
+   516→        `کلیک مرورگر: ${dbg.trusted ? "انجام شد" : "نه"}`,
+   517→        `کیبورد: ${dbg.keys ? "انجام شد" : "نه"}`,
+   518→        `کادر پیام (آداپتر): ${composerVisible(adapter) ? "بله" : "خیر"}`,
+   519→        `کادر پیام (عمومی): ${uniComp ? "بله" : "خیر"}`,
+   520→        `عنوان گفتگو: «${(adapter.chatTitle() || "").slice(0, 40) || "خالی"}»`,
+   521→      ];
+   522→      return { ok: false, errorKind: "chat_not_found", error: `گفتگوی «${target}» باز نشد — [اشکال‌یابی: ${parts.join(" | ")}]`, debug: domSnapshotDebug(adapter) };
+   523→    };
+   524→
+   525→    const search = adapter.searchBox?.();
+   526→    dbg.search = !!(search && isVisEl(search));
+   527→    const clickedTexts = [];
+   528→
+   529→    if (search) {
+   530→      try { search.focus(); } catch {}
+   531→      /* پاک‌سازی باقی‌مانده جستجوی قبلی — وگرنه متن‌ها به هم می‌چسبند */
+   532→      if (search.isContentEditable) {
+   533→        document.execCommand("selectAll", false, null);
+   534→        document.execCommand("delete", false, null);
+   535→        document.execCommand("insertText", false, target);
+   536→      } else {
+   537→        const setter = Object.getOwnPropertyDescriptor(search.constructor.prototype, "value")?.set;
+   538→        if (setter) setter.call(search, target);
+   539→        else search.value = target;
+   540→        search.dispatchEvent(new Event("input", { bubbles: true }));
+   541→      }
+   542→      dbg.typed = ((search.value ?? search.innerText ?? "") + "").trim().slice(0, 30);
+   543→      await sleep(1600);
+   544→    }
+   545→
+   546→    /* کلیدهای کیبورد کامل — رویدادهای keydown/keypress/keyup با کد صحیح */
+   547→    const pressKey = (el, info) => {
+   548→      for (const type of ["keydown", "keypress", "keyup"]) {
+   549→        try { el.dispatchEvent(new KeyboardEvent(type, { ...info, bubbles: true, cancelable: true })); } catch {}
+   550→      }
+   551→    };
+   552→
+   553→    /* کیبورد: ArrowDown برای انتخاب اولین نتیجه + Enter برای باز کردن */
+   554→    const keyboardSelectFirst = async () => {
+   555→      const focusEl = (search && isVisEl(search)) ? search : document.activeElement;
+   556→      if (!focusEl) return;
+   557→      pressKey(focusEl, { key: "ArrowDown", code: "ArrowDown", keyCode: 40, which: 40 });
+   558→      await sleep(400);
+   559→      pressKey(focusEl, { key: "Enter", code: "Enter", keyCode: 13, which: 13 });
+   560→      dbg.keys = true;
+   561→      await sleep(1700);
+   562→    };
+   563→
+   564→    /* کلیک مورد اعتماد مرورگر از طریق chrome.debugger — رویدادهای واقعی
+   565→       برای UIهایی که رویدادهای سینتتیک (isTrusted=false) را رد می‌کنند */
+   566→    const trustedClick = (x, y) =>
+   567→      new Promise((resolve) => {
+   568→        try {
+   569→          const timer = setTimeout(() => resolve(null), 4000);
+   570→          chrome.runtime.sendMessage({ type: "RW_TRUSTED_CLICK", x, y }, (resp) => {
+   571→            clearTimeout(timer);
+   572→            resolve(chrome.runtime.lastError ? null : resp || null);
+   573→          });
+   574→        } catch { resolve(null); }
+   575→      });
+   576→
+   577→    /* تلاش برای باز کردن گفتگو با کلیک روی یک کاندید — سه روش پشت سر هم */
+   578→    const tryClickOne = async (cand) => {
+   579→      const r = cand.getBoundingClientRect();
+   580→      clickedTexts.push((cand.innerText || "").trim().slice(0, 60));
+   581→      /* ① کلیک سینتتیک روی خود عنصر */
+   582→      deepClick(cand);
+   583→      dbg.clicks++;
+   584→      await sleep(1400);
+   585→      if (opened()) return true;
+   586→      /* ② کلیک روی والدین قابل‌کلیک — هندلر معمولاً روی آیتم لیست است */
+   587→      for (const anc of clickableAncestors(cand).slice(0, 2)) {
+   588→        deepClick(anc);
+   589→        dbg.clicks++;
+   590→        await sleep(1400);
+   591→        if (opened()) return true;
+   592→      }
+   593→      /* ③ کلیک مورد اعتماد مرورگر روی مختصات عنصر */
+   594→      const resp = await trustedClick(Math.round(r.x + r.width / 2), Math.round(r.y + r.height / 2));
+   595→      if (resp?.ok) {
+   596→        dbg.trusted = true;
+   597→        dbg.clicks++;
+   598→        await sleep(1700);
+   599→        if (opened()) return true;
+   600→      }
+   601→      return false;
+   602→    };
+   603→
+   604→    /* انتظار برای ظاهر شدن نتایج جستجو (جستجوی سراسری روبیکا کند است) */
+   605→    let candidates = [];
+   606→    await waitFor(() => {
+   607→      candidates = collectResultCandidates(target, search);
+   608→      return candidates.length ? candidates[0] : null;
+   609→    }, 6000, 400);
+   610→    dbg.results = candidates.length;
+   611→    /* مرجعِ خودِ عناصر نتیجه نگه داشته می‌شود — بعد از باز شدن گفتگو، نام مخاطب
+   612→       در عنوانِ گفتگو هم هست، پس «بسته شدن کشو» را باید از جدا شدن خودِ عناصر
+   613→       فهمید نه از نبودِ متن هدف در صفحه */
+   614→    let firstResultEls = candidates.slice(0, 4);
+   615→    const resultsGone = () => !firstResultEls.some((el) => el && el.isConnected && isVisEl(el));
+   616→
+   617→    if (candidates.length) {
+   618→      for (const cand of candidates.slice(0, 4)) {
+   619→        if (!cand || !isVisEl(cand)) continue;
+   620→        if (await tryClickOne(cand)) return { ok: true };
+   621→      }
+   622→    }
+   623→
+   624→    /* فال‌بک کیبورد: ArrowDown + Enter و سپس اسکن دوباره نتایج */
+   625→    await keyboardSelectFirst();
+   626→    await waitFor(() => {
+   627→      candidates = collectResultCandidates(target, search);
+   628→      return candidates.length ? candidates[0] : null;
+   629→    }, 2500, 350);
+   630→    dbg.results = Math.max(dbg.results, candidates.length);
+   631→    firstResultEls = candidates.slice(0, 4); /* رفرش مراجع برای دور دوم کلیک */
+   632→    if (candidates.length) {
+   633→      for (const cand of candidates.slice(0, 4)) {
+   634→        if (!cand || !isVisEl(cand)) continue;
+   635→        if (await tryClickOne(cand)) return { ok: true };
+   636→      }
+   637→    }
+   638→    if (opened()) return { ok: true };
+   639→
+   640→    /* فال‌بک هویتی: عنصری که کلیک شد نام هدف را داشت (نام کامل یا همهٔ کلمات معنادارش)
+   641→       و الان کادر پیام باز است → گفتگوی درست باز شده اما selector عنوان با آن نمی‌خواند.
+   642→       گارد گفتگوی اشتباه: اگر گفتگویی از قبل باز بود و عنوان تغییر نکرد، تأیید ممنوع —
+   643→       چون ممکن است کلیک بی‌اثر بوده و پیام به گفتگوی قبلی برود */
+   644→    const wantedFull = normFa(target);
+   645→    const wantedWords = wantedFull.split(" ").filter((w) => w.length >= 3);
+   646→    const nowTitle = normFa(adapter.chatTitle());
+   647→    const titleChanged = !!(nowTitle && nowTitle !== startTitle);
+   648→    const uniComp = findComposer(adapter, null);
+   649→    if (uniComp && isVisEl(uniComp) && (titleChanged || !composerWasOpen)) {
+   650→      for (const ct of clickedTexts) {
+   651→        const cn = normFa(ct);
+   652→        if (cn && (cn.includes(wantedFull) || (wantedWords.length && wantedWords.every((w) => cn.includes(w))))) {
+   653→          return { ok: true };
+   654→        }
+   655→      }
+   656→    }
+   657→
+   658→    return fail();
+   659→  }
+   660→
+   661→  /* ═══════ هسته اجرای Task ═══════ */
+   662→  async function runTask(task) {
+   663→    const detected = detectAdapter();
+   664→    if (!detected) {
+   665→      return { taskId: task.id, refNo: task.refNo, status: "failed", errorKind: "unsupported_action", error: "پلتفرم این صفحه پشتیبانی نمی‌شود" };
+   666→    }
+   667→    const adapter = detected.adapter;
+   668→    const ctx = getContext();
+   669→
+   670→    /* Safety Layer */
+   671→    const safety = safetyCheck(task, ctx);
+   672→    if (!safety.pass) {
+   673→      const expired = safety.reasons.some((r) => r.includes("منقضی"));
+   674→      return {
+   675→        taskId: task.id, refNo: task.refNo, status: "failed",
+   676→        errorKind: expired ? "session_expired" : "human_action",
+   677→        error: safety.reasons.join(" — "),
+   678→      };
+   679→    }
+   680→
+   681→    overlayShow();
+   682→    const steps = defaultSteps();
+   683→    overlaySteps(steps);
+   684→
+   685→    const support = adapter.support || {};
+   686→    let result = { taskId: task.id, refNo: task.refNo, status: "success" };
+   687→
+   688→    try {
+   689→      switch (task.action) {
+   690→        case "SEND_TEXT": {
+   691→          if (!support.sendText) { result = { ...result, status: "failed", errorKind: "unsupported_action", error: "ارسال متن در این سرویس پشتیبانی نمی‌شود" }; break; }
+   692→          setStep(steps, "find", "active");
+   693→          const oc = await openChat(adapter, task.target);
+   694→          if (!oc.ok) { setStep(steps, "find", "failed"); result = { ...result, status: "failed", errorKind: oc.errorKind, error: oc.error, result: oc.debug || "" }; break; }
+   695→          setStep(steps, "find", "done");
+   696→          setStep(steps, "input", "active");
+   697→          /* کادر پیام: اول selector آداپتر، بعد روش «عمومی» (پایین‌ترین فیلد متنی صفحه) —
+   698→             برای روبیکا که کلاس‌هایش با selectorهای آداپتر نمی‌خوانند */
+   699→          const viaAdapter = adapter.input();
+   700→          const composer = (viaAdapter && isVisEl(viaAdapter)) ? viaAdapter : findComposer(adapter, null);
+   701→          if (!composer) { setStep(steps, "input", "failed"); result = { ...result, status: "failed", errorKind: "input_not_found", error: "کادر پیام پیدا نشد — حتی با روش عمومی", result: domSnapshotDebug(adapter) }; break; }
+   702→          setStep(steps, "input", "done");
+   703→          setStep(steps, "prepare", "done");
+   704→          setStep(steps, "send", "active");
+   705→          const text = task.payload?.text || "";
+   706→          if (!text.trim()) { setStep(steps, "send", "failed"); result = { ...result, status: "failed", errorKind: "send_button_missing", error: "متن پیام خالی است" }; break; }
+   707→          const before = captureBefore(adapter);
+   708→          const sent = await typeAndSend(adapter, text, composer);
+   709→          if (!sent.ok) { setStep(steps, "send", "failed"); result = { ...result, status: "failed", errorKind: sent.errorKind, error: sent.error }; break; }
+   710→          setStep(steps, "send", "done");
+   711→          setStep(steps, "verify", "active");
+   712→          /* تأیید واقعی: حباب خروجیِ جدید با همین متن باید در گفتگو ظاهر شود */
+   713→          const verified = await waitFor(() => verifyNewOutgoing(adapter, text, before), 9000, 450);
+   714→          const inputAfter = (adapter.input() && isVisEl(adapter.input())) ? adapter.input() : composer;
+   715→          const inputCleared = !inputAfter || normText(inputAfter.innerText || inputAfter.value || "") === "";
+   716→          /* فال‌بک عمومیِ مستقل از کلاس‌های UI: کادر پیام خالی شده و متن پیام در بدنه گفتگو
+   717→             ظاهر شده است — برای سرویس‌هایی مثل روبیکا که حباب خروجی را با کلاس‌های متفاوت رندر می‌کنند */
+   718→          const bodyHasText = normText(document.body?.innerText || "").includes(normText(text));
+   719→          if (verified || (inputCleared && bodyHasText)) {
+   720→            setStep(steps, "verify", "done");
+   721→          } else if (inputCleared) {
+   722→            /* input خالی شده ولی نه حباب دیدیم و نه متن در گفتگو — ثبت Success ممنوع */
+   723→            setStep(steps, "verify", "failed");
+   724→            result = { ...result, status: "failed", errorKind: "send_not_verified", error: "پیام ارسال شد اما حباب آن در گفتگو دیده نشد — وضعیت نامشخص؛ لطفاً در صفحه بررسی کنید" };
+   725→          } else {
+   726→            setStep(steps, "verify", "failed");
+   727→            result = { ...result, status: "failed", errorKind: "send_not_verified", error: "ارسال تأیید نشد — پیام در گفتگو ظاهر نشد (ممکن است دکمه ارسال یا Enter کار نکرده باشد)" };
+   728→          }
+   729→          break;
+   730→        }
+   731→        case "SEND_IMAGE":
+   732→        case "SEND_FILE":
+   733→        case "SEND_IMAGE_WITH_CAPTION": {
+   734→          if (!support.sendImage && task.action !== "SEND_FILE") { result = { ...result, status: "failed", errorKind: "unsupported_action", error: "ارسال عکس پشتیبانی نمی‌شود" }; break; }
+   735→          setStep(steps, "find", "active");
+   736→          const oc = await openChat(adapter, task.target);
+   737→          if (!oc.ok) { setStep(steps, "find", "failed"); result = { ...result, status: "failed", errorKind: oc.errorKind, error: oc.error }; break; }
+   738→          setStep(steps, "find", "done");
+   739→          setStep(steps, "input", "active");
+   740→          const name = task.payload?.image || task.payload?.file || "attachment.bin";
+   741→          setStep(steps, "input", "done");
+   742→          setStep(steps, "prepare", "active");
+   743→          const before2 = captureBefore(adapter);
+   744→          const up = await uploadFile(adapter, makePlaceholderBlob(name), name, task.payload?.caption);
+   745→          if (!up.ok) { setStep(steps, "prepare", "failed"); result = { ...result, status: "failed", errorKind: up.errorKind, error: up.error }; break; }
+   746→          setStep(steps, "prepare", "done");
+   747→          setStep(steps, "send", "done");
+   748→          setStep(steps, "verify", "active");
+   749→          /* تأیید واقعی: حباب خروجیِ جدید باید ظاهر شود (بدون چک متن — ضمیمه است) */
+   750→          const verified2 = await waitFor(() => verifyNewOutgoing(adapter, "", before2), 10000, 500);
+   751→          setStep(steps, "verify", verified2 ? "done" : "failed");
+   752→          if (!verified2) result = { ...result, status: "failed", errorKind: "send_not_verified", error: "ارسال فایل تأیید نشد — حباب پیام در گفتگو ظاهر نشد" };
+   753→          break;
+   754→        }
+   755→        case "CREATE_GROUP": {
+   756→          if (!support.createGroup) { result = { ...result, status: "failed", errorKind: "unsupported_action", error: "ساخت گروه در این سرویس از طریق UI پشتیبانی نمی‌شود" }; break; }
+   757→          setStep(steps, "find", "done");
+   758→          setStep(steps, "input", "done");
+   759→          setStep(steps, "prepare", "active");
+   760→          /* مسیر استاندارد: دکمه منو → New Group — با جستجوی aria */
+   761→          const menuBtn = document.querySelector("[aria-label*='menu' i], [aria-label*='منو']") || document.querySelector("header button:last-of-type");
+   762→          if (menuBtn) { menuBtn.click(); await sleep(700); }
+   763→          const newGroup = window.__RW_FINDER__.byAriaLabels(["new group", "group", "گروه جدید"]);
+   764→          if (!newGroup) { setStep(steps, "prepare", "failed"); result = { ...result, status: "failed", errorKind: "platform_ui_changed", error: "گزینه ساخت گروه در منو پیدا نشد" }; break; }
+   765→          newGroup.click();
+   766→          await sleep(1000);
+   767→          setStep(steps, "prepare", "done");
+   768→          setStep(steps, "send", "active");
+   769→          const groupName = task.payload?.groupName || "گروه جدید";
+   770→          const nameInput = await waitFor(() => document.querySelector("input[placeholder*='نام'], input[placeholder*='name' i], div[contenteditable='true']"), 4000);
+   771→          if (nameInput) {
+   772→            nameInput.focus();
+   773→            if (nameInput.isContentEditable) document.execCommand("insertText", false, groupName);
+   774→            else { nameInput.value = groupName; nameInput.dispatchEvent(new Event("input", { bubbles: true })); }
+   775→            await sleep(400);
+   776→          }
+   777→          const confirm = window.__RW_FINDER__.byAriaLabels(["create", "ok", "ایجاد", "تأیید"]);
+   778→          if (confirm) confirm.click();
+   779→          await sleep(1200);
+   780→          setStep(steps, "send", "done");
+   781→          setStep(steps, "verify", "active");
+   782→          const okGroup = adapter.chatTitle()?.includes(groupName.slice(0, 6));
+   783→          setStep(steps, "verify", okGroup ? "done" : "failed");
+   784→          if (!okGroup) result = { ...result, status: "failed", errorKind: "platform_ui_changed", error: "گروه ساخته شد اما تأیید نشد" };
+   785→          break;
+   786→        }
+   787→        case "OPEN_CHAT": {
+   788→          setStep(steps, "find", "active");
+   789→          const oc = await openChat(adapter, task.target);
+   790→          setStep(steps, "find", oc.ok ? "done" : "failed");
+   791→          setStep(steps, "input", "done");
+   792→          setStep(steps, "prepare", "done");
+   793→          setStep(steps, "send", "done");
+   794→          setStep(steps, "verify", oc.ok ? "done" : "failed");
+   795→          if (!oc.ok) result = { ...result, status: "failed", errorKind: oc.errorKind, error: oc.error };
+   796→          break;
+   797→        }
+   798→        case "READ_CHAT_CONTEXT":
+   799→        case "GET_CHAT_TYPE": {
+   800→          setStep(steps, "find", "done");
+   801→          setStep(steps, "input", "done");
+   802→          setStep(steps, "prepare", "done");
+   803→          setStep(steps, "send", "done");
+   804→          setStep(steps, "verify", "active");
+   805→          const ctxNow = getContext();
+   806→          setStep(steps, "verify", "done");
+   807→          result.chatType = ctxNow.chatType;
+   808→          result.result = `Platform: ${ctxNow.platformLabel} | Chat: ${ctxNow.chatName || "—"} | Chat Type: ${typeLabel(ctxNow.chatType)}`;
+   809→          break;
+   810→        }
+   811→        default: {
+   812→          result = { ...result, status: "failed", errorKind: "unsupported_action", error: "Action ناشناخته" };
+   813→        }
+   814→      }
+   815→    } catch (e) {
+   816→      result = { ...result, status: "failed", errorKind: "platform_ui_changed", error: "خطای اجرا در صفحه — Adapter نیاز به بررسی دارد" };
+   817→    }
+   818→
+   819→    /* مانع امنیتی — Human Action Required (§۳۳) */
+   820→    if (result.status === "failed" && (result.errorKind === "human_action" || result.errorKind === "session_expired")) {
+   821→      const meta = result.errorKind === "session_expired"
+   822→        ? { friendly: "نشست اکانت منقضی شده است", advice: "در همین صفحه وارد شوید؛ سپس از پنل «ادامه وظیفه» را بزنید." }
+   823→        : { friendly: "مانع امنیتی ظاهر شده است", advice: "عامل هرگز موانع امنیتی را دور نمی‌زند — خودتان در صفحه اقدام کنید و بعد از پنل ادامه دهید." };
+   824→      overlayError(meta.friendly, meta.advice);
+   825→      reportContext();
+   826→      return result;
+   827→    }
+   828→
+   829→    reportContext();
+   830→    overlayHide(result.status === "success" ? 1600 : 8000);
+   831→    return result;
+   832→  }
+   833→
+   834→  function typeLabel(t) {
+   835→    return { private: "گفتگوی خصوصی", group: "گروه", channel: "کانال", bot: "بات", business: "حساب تجاری", unknown: "ناشناخته" }[t] ?? t;
+   836→  }
+   837→
+   838→  /* ═══════ گوش‌دادن به دستورات Service Worker ═══════ */
+   839→  chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
+   840→    if (msg?.type === "RW_PING") {
+   841→      sendResponse({ ok: true });
+   842→      return;
+   843→    }
+   844→    if (msg?.type === "RW_GET_CONTEXT") {
+   845→      sendResponse(getContext());
+   846→      return;
+   847→    }
+   848→    if (msg?.type === "RW_TASK") {
+   849→      if (working) {
+   850→        sendResponse({ taskId: msg.task.id, refNo: msg.task.refNo, status: "failed", errorKind: "human_action", error: "عامل هم‌اکنون مشغول وظیفه دیگری است" });
+   851→        return;
+   852→      }
+   853→      working = true;
+   854→      /* Watchdog — اگر runTask هیچ‌وقت settle نشود (باگ فریم‌ورک/تعلیق مرورگر)،
+   855→         پاسخ خطا برمی‌گردد وگرنه promise مربوط به sendMessage در Service Worker
+   856→         برای همیشه معلق می‌ماند و زنجیره وظایف قفل می‌شود */
+   857→      let answered = false;
+   858→      const finish = (res) => {
+   859→        if (answered) return;
+   860→        answered = true;
+   861→        try { sendResponse(res); } catch { /* کانال بسته شده */ }
+   862→      };
+   863→      const watchdog = setTimeout(() => finish({
+   864→        taskId: msg.task.id, refNo: msg.task.refNo, status: "failed",
+   865→        errorKind: "network", error: "مهلت اجرای وظیفه در صفحه تمام شد (watchdog)",
+   866→      }), 160000);
+   867→      runTask(msg.task)
+   868→        .then((res) => finish(res))
+   869→        .catch((e) => finish({ taskId: msg.task.id, refNo: msg.task.refNo, status: "failed", errorKind: "network", error: String(e) }))
+   870→        .finally(() => { clearTimeout(watchdog); working = false; });
+   871→      return true; /* async */
+   872→    }
+   873→  });
+   874→
+   875→  /* گزارش اولیه و در تغییر مسیر (SPA navigation) */
+   876→  reportContext();
+   877→  let lastUrl = location.href;
+   878→  setInterval(() => {
+   879→    if (location.href !== lastUrl) {
+   880→      lastUrl = location.href;
+   881→      reportContext();
+   882→    }
+   883→  }, 1500);
+   884→})();
+   885→

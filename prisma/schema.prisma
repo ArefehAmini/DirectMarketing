@@ -1,0 +1,186 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+/* کاربر واقعی پنل — با هش امن (scrypt) */
+model AppUser {
+  id           String     @id @default(cuid())
+  email        String     @unique
+  name         String
+  passwordHash String
+  role         String     @default("admin") // owner | admin | campaign_manager | operator | viewer
+  createdAt    DateTime   @default(now())
+  updatedAt    DateTime   @updatedAt
+  sessions     Session[]
+  workspace    Workspace?
+  workers      BrowserWorker[]
+  pairingCodes PairingCode[]
+  tickets      Ticket[]
+}
+
+/* فضای کاری هر کاربر — snapshot کامل داده‌ها به‌صورت JSON در دیتابیس */
+model Workspace {
+  id        String   @id @default(cuid())
+  userId    String   @unique
+  user      AppUser  @relation(fields: [userId], references: [id], onDelete: Cascade)
+  data      String
+  updatedAt DateTime @updatedAt
+}
+
+/* نشست ورود — کوکی httpOnly با توکن تصادفی */
+model Session {
+  id        String   @id @default(cuid())
+  token     String   @unique
+  userId    String
+  user      AppUser  @relation(fields: [userId], references: [id], onDelete: Cascade)
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+
+  @@index([userId])
+}
+
+/* کد بازیابی گذرواژه — ۶ رقمی با انقضای ۱۰ دقیقه */
+model PasswordResetCode {
+  id        String   @id @default(cuid())
+  email     String
+  code      String
+  expiresAt DateTime
+  used      Boolean  @default(false)
+  createdAt DateTime @default(now())
+
+  @@index([email])
+}
+
+/* ═════════ Browser Worker — عامل اجرایی مرورگر (Chrome Extension) ═════════ */
+
+model BrowserWorker {
+  id            String       @id @default(cuid())
+  userId        String
+  user          AppUser      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  workerNo      Int          // شماره نمایشی: 023
+  name          String
+  status        String       @default("pending") // pending | online | offline | needs_action
+  tokenHash     String       @unique // sha256 توکن افزونه — توکن خام هرگز ذخیره نمی‌شود
+  chromeVersion String       @default("")
+  extVersion    String       @default("")
+  profileLabel  String       @default("") // Chrome Profile-12
+  simulated     Boolean      @default(false) // Worker شبیه‌ساز داخل پنل
+  lastHeartbeat DateTime?
+  createdAt     DateTime     @default(now())
+  tasks         AgentTask[]
+  events        WorkerEvent[]
+  tabs          WorkerTab[]
+
+  @@unique([userId, workerNo])
+  @@index([userId])
+}
+
+/* کد جفت‌سازی افزونه با پنل — RX-28491 با انقضای ۱۵ دقیقه */
+model PairingCode {
+  id         String   @id @default(cuid())
+  userId     String
+  user       AppUser  @relation(fields: [userId], references: [id], onDelete: Cascade)
+  code       String   @unique
+  workerName String   @default("")
+  expiresAt  DateTime
+  used       Boolean  @default(false)
+  createdAt  DateTime @default(now())
+
+  @@index([userId])
+}
+
+/* وظیفه عامل — TASK-9281 با چرخه کامل وضعیت */
+model AgentTask {
+  id          String        @id @default(cuid())
+  userId      String
+  workerId    String?
+  worker      BrowserWorker? @relation(fields: [workerId], references: [id], onDelete: SetNull)
+  refNo       Int           // شماره نمایشی: 9281
+  action      String        // SEND_TEXT | SEND_IMAGE | SEND_FILE | SEND_IMAGE_WITH_CAPTION | CREATE_GROUP | OPEN_CHAT | READ_CHAT_CONTEXT
+  platform    String
+  accountId   String        @default("")
+  accountName String        @default("")
+  target      String        @default("") // مخاطب مقصد
+  payload     String        @default("{}") // JSON: text, caption, fileName, groupName, members, scenario
+  status      String        @default("queued") // queued | received | running | verifying | success | failed | paused | human_action | canceled
+  steps       String        @default("[]") // JSON تایم‌لاین Agent Loop
+  result      String        @default("")
+  error       String        @default("")
+  errorKind   String        @default("") // chat_not_found | input_not_found | upload_failed | send_button_missing | session_expired | auth_required | network | unsupported_action | platform_ui_changed | human_action
+  createdAt   DateTime      @default(now())
+  ackAt       DateTime?
+  startedAt   DateTime?
+  finishedAt  DateTime?
+
+  @@unique([userId, refNo])
+  @@index([userId])
+  @@index([workerId])
+  @@index([status])
+}
+
+/* Event Log افزونه‌ها و Workerها */
+model WorkerEvent {
+  id       String        @id @default(cuid())
+  userId   String
+  workerId String?
+  worker   BrowserWorker? @relation(fields: [workerId], references: [id], onDelete: Cascade)
+  type     String        // connected | disconnected | account_detected | task_received | task_started | message_sent | task_failed | session_expired | worker_offline | adapter_error | human_action_required | pairing
+  title    String
+  detail   String        @default("")
+  at       DateTime      @default(now())
+
+  @@index([userId])
+  @@index([workerId])
+}
+
+/* تب‌های باز مرورگر — آخرین Snapshot از Heartbeat */
+model WorkerTab {
+  id       String       @id @default(cuid())
+  workerId String
+  worker   BrowserWorker @relation(fields: [workerId], references: [id], onDelete: Cascade)
+  platform String       @default("other")
+  url      String       @default("")
+  title    String       @default("")
+  status   String       @default("ready") // ready | working | error | disconnected
+  chatName String       @default("")
+  chatType String       @default("") // private | group | channel | bot | business | unknown
+  session  String       @default("active") // active | expiring | expired
+
+  @@index([workerId])
+}
+
+/* ═══════ سیستم تیکت پشتیبانی — کاربر ایراد ثبت می‌کند، مالک پیگیری و پاسخ می‌دهد ═══════ */
+
+model Ticket {
+  id        String          @id @default(cuid())
+  userId    String
+  user      AppUser         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  refNo     Int             @unique // شماره نمایشی: 1001
+  subject   String
+  category  String          @default("other") // bug | feature | account | campaign | extension | other
+  priority  String          @default("normal") // low | normal | high | urgent
+  status    String          @default("open") // open | in_progress | waiting | resolved | closed
+  createdAt DateTime        @default(now())
+  updatedAt DateTime        @updatedAt
+  messages  TicketMessage[]
+
+  @@index([userId])
+  @@index([status])
+}
+
+model TicketMessage {
+  id         String   @id @default(cuid())
+  ticketId   String
+  ticket     Ticket   @relation(fields: [ticketId], references: [id], onDelete: Cascade)
+  authorRole String   // user | owner
+  authorName String
+  body       String
+  createdAt  DateTime @default(now())
+
+  @@index([ticketId])
+}

@@ -1,0 +1,90 @@
+<!DOCTYPE html>
+<html lang="fa" dir="rtl">
+<head>
+  <meta charset="UTF-8" />
+  <link rel="stylesheet" href="popup.css" />
+</head>
+<body>
+  <!-- صفحه خوش‌آمد (بعد از نصب) -->
+  <div id="welcome" class="hidden">
+    <div class="hero">
+      <div class="hero-icon">RW</div>
+      <h1>RasaWeb Agent</h1>
+      <p>عامل اجرایی مرورگر — اجرای دستورات پنل مرکزی در محیط واقعی پیام‌رسان‌ها</p>
+    </div>
+    <div class="field">
+      <label>آدرس پنل مرکزی</label>
+      <input id="panel-url" type="url" placeholder="https://panel.example.com" dir="ltr" />
+      <div class="hint">آدرس همان پنلی است که افزونه را از آن دانلود کردید — به‌صورت پیش‌فرض پر شده است.</div>
+    </div>
+    <button id="welcome-open-panel" class="btn ghost">کپی آدرس پنل مرکزی</button>
+    <button id="welcome-continue" class="btn primary">شروع اتصال</button>
+    <div class="hint center">مرحله بعد: از پنل ← «عامل مرورگر» ← «Browser Workers» ← «افزودن Worker» کد اتصال RX بگیرید.</div>
+  </div>
+
+  <!-- صفحه اصلی popup -->
+  <div id="main" class="hidden">
+    <header>
+      <div class="brand">
+        <div class="logo">RW</div>
+        <div>
+          <div class="title">RasaWeb Agent</div>
+          <div id="status-line" class="status offline">⚪ در انتظار جفت‌سازی</div>
+        </div>
+      </div>
+      <div id="ext-version" class="ver">v1.2.7</div>
+    </header>
+
+    <!-- جفت‌سازی -->
+    <section id="pairing" class="card">
+      <div class="card-title">اتصال به پنل RasaWeb</div>
+      <div class="field">
+        <label>آدرس پنل مرکزی</label>
+        <input id="pair-url" type="url" dir="ltr" placeholder="https://panel.example.com" />
+      </div>
+      <div class="field">
+        <label>کد اتصال (از پنل: عامل مرورگر ← Browser Workers ← افزودن Worker)</label>
+        <input id="pair-code" type="text" dir="ltr" placeholder="RX-28491" autocomplete="off" />
+      </div>
+      <button id="pair-btn" class="btn primary">اتصال به پنل</button>
+      <div id="pair-error" class="error hidden"></div>
+    </section>
+
+    <!-- وضعیت متصل -->
+    <section id="connected" class="hidden">
+      <div class="stats">
+        <div class="stat">
+          <div class="stat-label">فضای کاری</div>
+          <div id="st-workspace" class="stat-value">—</div>
+        </div>
+        <div class="stat">
+          <div class="stat-label">Worker</div>
+          <div id="st-worker" class="stat-value">—</div>
+        </div>
+      </div>
+      <div class="stats">
+        <div class="stat">
+          <div class="stat-label">اکانت‌های متصل</div>
+          <div id="st-accounts" class="stat-value">—</div>
+        </div>
+        <div class="stat">
+          <div class="stat-label">وظایف فعال</div>
+          <div id="st-tasks" class="stat-value">0</div>
+        </div>
+        <div class="stat">
+          <div class="stat-label">صف</div>
+          <div id="st-queue" class="stat-value">0</div>
+        </div>
+      </div>
+      <div id="sync-line" class="sync">آخرین همگام‌سازی: —</div>
+      <div class="actions">
+        <button id="open-panel" class="btn primary">Open Control Panel</button>
+        <button id="open-sidepanel" class="btn ghost">Side Panel</button>
+        <button id="unpair" class="btn danger-ghost">قطع اتصال</button>
+      </div>
+    </section>
+  </div>
+
+  <script src="popup.js"></script>
+</body>
+</html>

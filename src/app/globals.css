@@ -1,0 +1,542 @@
+@import "tailwindcss";
+@import "tw-animate-css";
+
+@custom-variant dark (&:is(.dark *));
+
+@font-face {
+  font-family: "Vazirmatn";
+  src: url("/fonts/Vazirmatn-Regular.woff2") format("woff2");
+  font-weight: 400;
+  font-style: normal;
+  font-display: swap;
+}
+@font-face {
+  font-family: "Vazirmatn";
+  src: url("/fonts/Vazirmatn-Medium.woff2") format("woff2");
+  font-weight: 500;
+  font-style: normal;
+  font-display: swap;
+}
+@font-face {
+  font-family: "Vazirmatn";
+  src: url("/fonts/Vazirmatn-SemiBold.woff2") format("woff2");
+  font-weight: 600;
+  font-style: normal;
+  font-display: swap;
+}
+@font-face {
+  font-family: "Vazirmatn";
+  src: url("/fonts/Vazirmatn-Bold.woff2") format("woff2");
+  font-weight: 700;
+  font-style: normal;
+  font-display: swap;
+}
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --font-sans: "Vazirmatn", "Segoe UI", Tahoma, ui-sans-serif, system-ui, sans-serif;
+  --font-mono: "Vazirmatn", ui-monospace, monospace;
+  --color-sidebar-ring: var(--sidebar-ring);
+  --color-sidebar-border: var(--sidebar-border);
+  --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
+  --color-sidebar-accent: var(--sidebar-accent);
+  --color-sidebar-primary-foreground: var(--sidebar-primary-foreground);
+  --color-sidebar-primary: var(--sidebar-primary);
+  --color-sidebar-foreground: var(--sidebar-foreground);
+  --color-sidebar: var(--sidebar);
+  --color-chart-5: var(--chart-5);
+  --color-chart-4: var(--chart-4);
+  --color-chart-3: var(--chart-3);
+  --color-chart-2: var(--chart-2);
+  --color-chart-1: var(--chart-1);
+  --color-ring: var(--ring);
+  --color-input: var(--input);
+  --color-border: var(--border);
+  --color-destructive: var(--destructive);
+  --color-success: var(--success);
+  --color-warning: var(--warning);
+  --color-info: var(--info);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-accent: var(--accent);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-muted: var(--muted);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-secondary: var(--secondary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-primary: var(--primary);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-popover: var(--popover);
+  --color-card-foreground: var(--card-foreground);
+  --color-card: var(--card);
+  --radius-sm: calc(var(--radius) - 4px);
+  --radius-md: calc(var(--radius) - 2px);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) + 4px);
+}
+
+:root {
+  --radius: 0.625rem;
+  --success: #10B981;
+  --warning: #F59E0B;
+  --info: #0EA5E9;
+  --background: oklch(0.985 0.002 180);
+  --foreground: oklch(0.21 0.02 220);
+  --card: oklch(1 0 0);
+  --card-foreground: oklch(0.21 0.02 220);
+  --popover: oklch(1 0 0);
+  --popover-foreground: oklch(0.21 0.02 220);
+  --primary: oklch(0.55 0.1 194);
+  --primary-foreground: oklch(0.99 0 0);
+  --secondary: oklch(0.965 0.006 190);
+  --secondary-foreground: oklch(0.32 0.03 210);
+  --muted: oklch(0.965 0.005 190);
+  --muted-foreground: oklch(0.52 0.02 215);
+  --accent: oklch(0.955 0.02 185);
+  --accent-foreground: oklch(0.35 0.06 195);
+  --destructive: oklch(0.577 0.215 27);
+  --border: oklch(0.92 0.006 190);
+  --input: oklch(0.92 0.006 190);
+  --ring: oklch(0.55 0.1 194);
+  --chart-1: oklch(0.55 0.1 194);
+  --chart-2: oklch(0.72 0.13 155);
+  --chart-3: oklch(0.8 0.14 85);
+  --chart-4: oklch(0.63 0.17 250);
+  --chart-5: oklch(0.6 0.21 27);
+  --sidebar: oklch(0.235 0.03 220);
+  --sidebar-foreground: oklch(0.88 0.01 190);
+  --sidebar-primary: oklch(0.62 0.11 185);
+  --sidebar-primary-foreground: oklch(0.99 0 0);
+  --sidebar-accent: oklch(0.3 0.035 215);
+  --sidebar-accent-foreground: oklch(0.95 0.01 190);
+  --sidebar-border: oklch(0.3 0.03 215);
+  --sidebar-ring: oklch(0.62 0.11 185);
+}
+
+.dark {
+  --background: oklch(0.17 0.02 220);
+  --foreground: oklch(0.93 0.008 190);
+  --card: oklch(0.215 0.024 220);
+  --card-foreground: oklch(0.93 0.008 190);
+  --popover: oklch(0.215 0.024 220);
+  --popover-foreground: oklch(0.93 0.008 190);
+  --primary: oklch(0.68 0.11 185);
+  --primary-foreground: oklch(0.15 0.02 220);
+  --secondary: oklch(0.27 0.026 218);
+  --secondary-foreground: oklch(0.93 0.008 190);
+  --muted: oklch(0.27 0.026 218);
+  --muted-foreground: oklch(0.68 0.014 200);
+  --accent: oklch(0.29 0.03 210);
+  --accent-foreground: oklch(0.93 0.01 190);
+  --destructive: oklch(0.63 0.2 25);
+  --border: oklch(0.3 0.024 215);
+  --input: oklch(0.32 0.024 215);
+  --ring: oklch(0.68 0.11 185);
+  --chart-1: oklch(0.68 0.11 185);
+  --chart-2: oklch(0.76 0.13 155);
+  --chart-3: oklch(0.82 0.13 85);
+  --chart-4: oklch(0.68 0.15 250);
+  --chart-5: oklch(0.65 0.2 27);
+  --sidebar: oklch(0.19 0.022 218);
+  --sidebar-foreground: oklch(0.88 0.01 190);
+  --sidebar-primary: oklch(0.68 0.11 185);
+  --sidebar-primary-foreground: oklch(0.15 0.02 220);
+  --sidebar-accent: oklch(0.26 0.028 216);
+  --sidebar-accent-foreground: oklch(0.93 0.01 190);
+  --sidebar-border: oklch(0.28 0.026 216);
+  --sidebar-ring: oklch(0.68 0.11 185);
+}
+
+@layer base {
+  * {
+    @apply border-border outline-ring/50;
+  }
+  html {
+    direction: rtl;
+  }
+  body {
+    @apply bg-background text-foreground;
+    font-family: var(--font-sans);
+    font-feature-settings: "ss01";
+  }
+}
+
+/* Thin elegant scrollbars */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: oklch(0.75 0.02 200 / 0.5);
+  border-radius: 8px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: oklch(0.6 0.03 200 / 0.7);
+}
+.dark ::-webkit-scrollbar-thumb {
+  background: oklch(0.42 0.02 200 / 0.6);
+}
+
+/* ═══════ سیستم تم رنگی — ۸ تم تولیدی (Current Production Theme Palettes) ═══════
+   هر تم کل توکن‌ها را override می‌کند؛ کلاس .dark توسط Theme Provider
+   فقط برای تم‌های تیره فعال می‌شود. */
+
+/* ① کانتیننتال — گردویی تیره با طلایی کلاسیک */
+html[data-theme="continental"] {
+  --background: #1D1410;
+  --foreground: #F5E9D9;
+  --card: #2A1D16;
+  --card-foreground: #F5E9D9;
+  --popover: #2A1D16;
+  --popover-foreground: #F5E9D9;
+  --primary: #D4AF37;
+  --primary-foreground: #0B0D12;
+  --secondary: #38271D;
+  --secondary-foreground: #C9B08A;
+  --muted: #38271D;
+  --muted-foreground: #8A7558;
+  --accent: #38271D;
+  --accent-foreground: #C9B08A;
+  --destructive: #CF5C4D;
+  --border: #4A3424;
+  --input: #4A3424;
+  --ring: #D4AF37;
+  --chart-1: #D4AF37;
+  --chart-2: #6DB488;
+  --chart-3: #E2A93C;
+  --chart-4: #B78C5B;
+  --chart-5: #CF5C4D;
+  --sidebar: #171009;
+  --sidebar-foreground: #C9B08A;
+  --sidebar-primary: #D4AF37;
+  --sidebar-primary-foreground: #0B0D12;
+  --sidebar-accent: #33231A;
+  --sidebar-accent-foreground: #F5E9D9;
+  --sidebar-border: #3E2B1D;
+  --sidebar-ring: #D4AF37;
+  --success: #6DB488;
+  --warning: #E2A93C;
+  --info: #B78C5B;
+}
+
+/* ② گرافیت — تیرهٔ خنثی با لهجهٔ طلایی */
+html[data-theme="graphite"] {
+  --background: #0F1117;
+  --foreground: #F1F5F9;
+  --card: #1A1D27;
+  --card-foreground: #F1F5F9;
+  --popover: #1A1D27;
+  --popover-foreground: #F1F5F9;
+  --primary: #DAA520;
+  --primary-foreground: #0B0D12;
+  --secondary: #252836;
+  --secondary-foreground: #94A3B8;
+  --muted: #252836;
+  --muted-foreground: #64748B;
+  --accent: #252836;
+  --accent-foreground: #94A3B8;
+  --destructive: #EF4444;
+  --border: #2E3347;
+  --input: #2E3347;
+  --ring: #DAA520;
+  --chart-1: #DAA520;
+  --chart-2: #10B981;
+  --chart-3: #F59E0B;
+  --chart-4: #60A5FA;
+  --chart-5: #EF4444;
+  --sidebar: #0B0D12;
+  --sidebar-foreground: #94A3B8;
+  --sidebar-primary: #DAA520;
+  --sidebar-primary-foreground: #0B0D12;
+  --sidebar-accent: #20232F;
+  --sidebar-accent-foreground: #F1F5F9;
+  --sidebar-border: #262B3B;
+  --sidebar-ring: #DAA520;
+  --success: #10B981;
+  --warning: #F59E0B;
+  --info: #60A5FA;
+}
+
+/* ③ نیلی نیمه‌شب — بنفش سیر روی سرمه‌ای */
+html[data-theme="midnight_indigo"] {
+  --background: #0E0D1A;
+  --foreground: #E8E6FA;
+  --card: #181631;
+  --card-foreground: #E8E6FA;
+  --popover: #181631;
+  --popover-foreground: #E8E6FA;
+  --primary: #7B6CFF;
+  --primary-foreground: #0B0D12;
+  --secondary: #221F44;
+  --secondary-foreground: #A5A1C7;
+  --muted: #221F44;
+  --muted-foreground: #6B6890;
+  --accent: #221F44;
+  --accent-foreground: #A5A1C7;
+  --destructive: #FF6B8A;
+  --border: #2F2D57;
+  --input: #2F2D57;
+  --ring: #7B6CFF;
+  --chart-1: #7B6CFF;
+  --chart-2: #5DD49E;
+  --chart-3: #FFC25C;
+  --chart-4: #5FA9FF;
+  --chart-5: #FF6B8A;
+  --sidebar: #0A0914;
+  --sidebar-foreground: #A5A1C7;
+  --sidebar-primary: #7B6CFF;
+  --sidebar-primary-foreground: #0B0D12;
+  --sidebar-accent: #1B1838;
+  --sidebar-accent-foreground: #E8E6FA;
+  --sidebar-border: #262347;
+  --sidebar-ring: #7B6CFF;
+  --success: #5DD49E;
+  --warning: #FFC25C;
+  --info: #5FA9FF;
+}
+
+/* ④ دی‌لایت — روشنِ گرم با طلایی محتاط */
+html[data-theme="daylight"] {
+  --background: #F8F6F1;
+  --foreground: #1F2937;
+  --card: #FFFFFF;
+  --card-foreground: #1F2937;
+  --popover: #FFFFFF;
+  --popover-foreground: #1F2937;
+  --primary: #B8860B;
+  --primary-foreground: #0B0D12;
+  --secondary: #F3F4F6;
+  --secondary-foreground: #4B5563;
+  --muted: #F3F4F6;
+  --muted-foreground: #9CA3AF;
+  --accent: #F3F4F6;
+  --accent-foreground: #4B5563;
+  --destructive: #EF4444;
+  --border: #E5E7EB;
+  --input: #E5E7EB;
+  --ring: #B8860B;
+  --chart-1: #B8860B;
+  --chart-2: #10B981;
+  --chart-3: #F59E0B;
+  --chart-4: #3B82F6;
+  --chart-5: #EF4444;
+  --sidebar: #EFEAE0;
+  --sidebar-foreground: #4B5563;
+  --sidebar-primary: #B8860B;
+  --sidebar-primary-foreground: #0B0D12;
+  --sidebar-accent: #E9E2D4;
+  --sidebar-accent-foreground: #1F2937;
+  --sidebar-border: #E0DBCE;
+  --sidebar-ring: #B8860B;
+  --success: #10B981;
+  --warning: #F59E0B;
+  --info: #3B82F6;
+}
+
+/* ⑤ سرامد رز — عاج گرم با رزگلد ملایم */
+html[data-theme="saramad_rose"] {
+  --background: #FDF6F2;
+  --foreground: #4A2C2C;
+  --card: #FFFFFF;
+  --card-foreground: #4A2C2C;
+  --popover: #FFFFFF;
+  --popover-foreground: #4A2C2C;
+  --primary: #C46B6B;
+  --primary-foreground: #0B0D12;
+  --secondary: #F6E7DF;
+  --secondary-foreground: #7A4D4D;
+  --muted: #F6E7DF;
+  --muted-foreground: #B9928F;
+  --accent: #F6E7DF;
+  --accent-foreground: #7A4D4D;
+  --destructive: #C44545;
+  --border: #F0D7CD;
+  --input: #F0D7CD;
+  --ring: #C46B6B;
+  --chart-1: #C46B6B;
+  --chart-2: #6DB488;
+  --chart-3: #D49250;
+  --chart-4: #9C6F9C;
+  --chart-5: #C44545;
+  --sidebar: #F7EAE3;
+  --sidebar-foreground: #7A4D4D;
+  --sidebar-primary: #C46B6B;
+  --sidebar-primary-foreground: #0B0D12;
+  --sidebar-accent: #F2E0D7;
+  --sidebar-accent-foreground: #4A2C2C;
+  --sidebar-border: #EED5CA;
+  --sidebar-ring: #C46B6B;
+  --success: #6DB488;
+  --warning: #D49250;
+  --info: #9C6F9C;
+}
+
+/* ⑥ لاوند — کرم و یاسی روشن */
+html[data-theme="lavande"] {
+  --background: #F8F5FB;
+  --foreground: #2E2440;
+  --card: #FFFFFF;
+  --card-foreground: #2E2440;
+  --popover: #FFFFFF;
+  --popover-foreground: #2E2440;
+  --primary: #8B6FC4;
+  --primary-foreground: #0B0D12;
+  --secondary: #ECE5F3;
+  --secondary-foreground: #5A4778;
+  --muted: #ECE5F3;
+  --muted-foreground: #A596B7;
+  --accent: #ECE5F3;
+  --accent-foreground: #5A4778;
+  --destructive: #C4566A;
+  --border: #DDD0EB;
+  --input: #DDD0EB;
+  --ring: #8B6FC4;
+  --chart-1: #8B6FC4;
+  --chart-2: #6DB488;
+  --chart-3: #D4A558;
+  --chart-4: #6F9EC4;
+  --chart-5: #C4566A;
+  --sidebar: #F0EBF8;
+  --sidebar-foreground: #5A4778;
+  --sidebar-primary: #8B6FC4;
+  --sidebar-primary-foreground: #0B0D12;
+  --sidebar-accent: #E9E1F4;
+  --sidebar-accent-foreground: #2E2440;
+  --sidebar-border: #E0D4EE;
+  --sidebar-ring: #8B6FC4;
+  --success: #6DB488;
+  --warning: #D4A558;
+  --info: #6F9EC4;
+}
+
+/* ⑦ ساکورا — سفید و صورتی لطیف */
+html[data-theme="sakura"] {
+  --background: #FFF3F6;
+  --foreground: #4A1F33;
+  --card: #FFFFFF;
+  --card-foreground: #4A1F33;
+  --popover: #FFFFFF;
+  --popover-foreground: #4A1F33;
+  --primary: #E85A8A;
+  --primary-foreground: #0B0D12;
+  --secondary: #FFE1EC;
+  --secondary-foreground: #7A3A55;
+  --muted: #FFE1EC;
+  --muted-foreground: #C08AA1;
+  --accent: #FFE1EC;
+  --accent-foreground: #7A3A55;
+  --destructive: #CC4060;
+  --border: #FFD0DF;
+  --input: #FFD0DF;
+  --ring: #E85A8A;
+  --chart-1: #E85A8A;
+  --chart-2: #69B889;
+  --chart-3: #E2A647;
+  --chart-4: #5FA1D4;
+  --chart-5: #CC4060;
+  --sidebar: #FFE9F0;
+  --sidebar-foreground: #7A3A55;
+  --sidebar-primary: #E85A8A;
+  --sidebar-primary-foreground: #0B0D12;
+  --sidebar-accent: #FFDFE9;
+  --sidebar-accent-foreground: #4A1F33;
+  --sidebar-border: #FFD0DF;
+  --sidebar-ring: #E85A8A;
+  --success: #69B889;
+  --warning: #E2A647;
+  --info: #5FA1D4;
+}
+
+/* ⑧ فارست — سبز جنگلی روی سطوح کاغذی */
+html[data-theme="forest"] {
+  --background: #F5F2E9;
+  --foreground: #1F3326;
+  --card: #FDFAF2;
+  --card-foreground: #1F3326;
+  --popover: #FDFAF2;
+  --popover-foreground: #1F3326;
+  --primary: #357A4A;
+  --primary-foreground: #FFFFFF;
+  --secondary: #E8E2D2;
+  --secondary-foreground: #3D5A44;
+  --muted: #E8E2D2;
+  --muted-foreground: #87967F;
+  --accent: #E8E2D2;
+  --accent-foreground: #3D5A44;
+  --destructive: #B65A4A;
+  --border: #CCC8AE;
+  --input: #CCC8AE;
+  --ring: #357A4A;
+  --chart-1: #357A4A;
+  --chart-2: #4A955F;
+  --chart-3: #C8965A;
+  --chart-4: #4A7595;
+  --chart-5: #B65A4A;
+  --sidebar: #EDE9DB;
+  --sidebar-foreground: #3D5A44;
+  --sidebar-primary: #357A4A;
+  --sidebar-primary-foreground: #FFFFFF;
+  --sidebar-accent: #E4DFCC;
+  --sidebar-accent-foreground: #1F3326;
+  --sidebar-border: #CCC8AE;
+  --sidebar-ring: #357A4A;
+  --success: #4A955F;
+  --warning: #C8965A;
+  --info: #4A7595;
+}
+
+/* Hide scrollbar utility */
+.no-scrollbar::-webkit-scrollbar {
+  display: none;
+}
+.no-scrollbar {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+
+/* Persian numerals context */
+.fa-num {
+  font-variant-numeric: normal;
+}
+
+/* Subtle grid pattern for login page */
+.bg-grid {
+  background-image:
+    linear-gradient(to left, oklch(0.6 0.1 190 / 0.06) 1px, transparent 1px),
+    linear-gradient(to bottom, oklch(0.6 0.1 190 / 0.06) 1px, transparent 1px);
+  background-size: 44px 44px;
+}
+
+/* Shimmer skeleton */
+@keyframes shimmer {
+  100% { transform: translateX(-100%); }
+}
+.skeleton-shimmer {
+  position: relative;
+  overflow: hidden;
+}
+.skeleton-shimmer::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  transform: translateX(100%);
+  background: linear-gradient(90deg, transparent, oklch(1 0 0 / 0.35), transparent);
+  animation: shimmer 1.6s infinite;
+}
+
+/* Pulsing status dot */
+@keyframes pulse-dot {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50% { opacity: 0.55; transform: scale(0.82); }
+}
+.pulse-dot {
+  animation: pulse-dot 2s ease-in-out infinite;
+}
+
+/* Message bubble tails for preview */
+.bubble-rtl {
+  border-radius: 14px 14px 14px 4px;
+}
